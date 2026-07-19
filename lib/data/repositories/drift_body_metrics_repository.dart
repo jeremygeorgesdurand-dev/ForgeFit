@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../domain/entities/progress.dart';
@@ -10,6 +12,12 @@ class DriftBodyMetricsRepository implements BodyMetricsRepository {
   DriftBodyMetricsRepository(this._db);
 
   DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  Map<String, double> _decodeMeasurements(String? json) {
+    if (json == null || json.isEmpty) return const {};
+    final decoded = jsonDecode(json) as Map<String, dynamic>;
+    return decoded.map((k, v) => MapEntry(k, (v as num).toDouble()));
+  }
 
   @override
   Future<List<BodyMetric>> getHistory(String userId, {int limit = 200}) async {
@@ -24,6 +32,7 @@ class DriftBodyMetricsRepository implements BodyMetricsRepository {
               date: r.date,
               weightKg: r.weightKg,
               bodyFatPct: r.bodyFatPct,
+              measurements: _decodeMeasurements(r.measurements),
             ))
         .toList();
   }
@@ -45,6 +54,9 @@ class DriftBodyMetricsRepository implements BodyMetricsRepository {
             date: day,
             weightKg: Value(metric.weightKg),
             bodyFatPct: Value(metric.bodyFatPct),
+            measurements: Value(
+              metric.measurements.isEmpty ? null : jsonEncode(metric.measurements),
+            ),
           ),
         );
   }

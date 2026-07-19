@@ -110,6 +110,8 @@ class BodyMetrics extends Table {
   DateTimeColumn get date => dateTime()();
   RealColumn get weightKg => real().nullable()();
   RealColumn get bodyFatPct => real().nullable()();
+  // JSON-encoded Map<String, double> (e.g. {"waist": 82.0, "arm": 36.5}).
+  TextColumn get measurements => text().nullable()();
 }
 
 @DataClassName('TrainingProgramRow')

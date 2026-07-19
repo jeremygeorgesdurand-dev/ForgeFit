@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/providers/body_metrics_providers.dart';
 import '../../../application/providers/repository_providers.dart';
 import '../../../application/providers/user_providers.dart';
+import '../../../core/localization/fr_labels.dart';
 import '../../../core/units/weight_units.dart';
 import '../../../domain/entities/progress.dart';
 
@@ -19,6 +20,10 @@ class BodyMetricsScreen extends ConsumerStatefulWidget {
 class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
   final _weightController = TextEditingController();
   final _bodyFatController = TextEditingController();
+  final Map<String, TextEditingController> _measurementControllers = {
+    for (final key in bodyMeasurementKeys) key: TextEditingController(),
+  };
+  bool _showMeasurements = false;
   DateTime _selectedDate = DateTime.now();
   bool _saving = false;
 
@@ -26,6 +31,9 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
   void dispose() {
     _weightController.dispose();
     _bodyFatController.dispose();
+    for (final c in _measurementControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -42,9 +50,14 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
   Future<void> _save() async {
     final weight = double.tryParse(_weightController.text.replaceAll(',', '.'));
     final bodyFat = double.tryParse(_bodyFatController.text.replaceAll(',', '.'));
-    if (weight == null && bodyFat == null) {
+    final measurements = <String, double>{
+      for (final entry in _measurementControllers.entries)
+        if (double.tryParse(entry.value.text.replaceAll(',', '.')) != null)
+          entry.key: double.parse(entry.value.text.replaceAll(',', '.')),
+    };
+    if (weight == null && bodyFat == null && measurements.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Renseigne au moins un poids ou un taux de masse grasse.')),
+        const SnackBar(content: Text('Renseigne au moins une valeur.')),
       );
       return;
     }
@@ -56,11 +69,15 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
               date: _selectedDate,
               weightKg: weight,
               bodyFatPct: bodyFat,
+              measurements: measurements,
             ),
           );
       ref.invalidate(bodyMetricsHistoryProvider);
       _weightController.clear();
       _bodyFatController.clear();
+      for (final c in _measurementControllers.values) {
+        c.clear();
+      }
       setState(() => _selectedDate = DateTime.now());
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -168,6 +185,39 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => setState(() => _showMeasurements = !_showMeasurements),
+                child: Row(
+                  children: [
+                    Icon(_showMeasurements ? Icons.expand_less : Icons.expand_more, size: 18),
+                    const SizedBox(width: 4),
+                    Text('Autres mesures (optionnel)', style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              if (_showMeasurements) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final key in bodyMeasurementKeys)
+                      SizedBox(
+                        width: 140,
+                        child: TextField(
+                          controller: _measurementControllers[key],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(
+                            labelText: '${measurementLabelFr(key)} (cm)',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -221,8 +271,14 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
                         ].join(' · '),
                       ),
                       subtitle: Text(
-                        '${metric.date.day.toString().padLeft(2, '0')}/'
-                        '${metric.date.month.toString().padLeft(2, '0')}/${metric.date.year}',
+                        [
+                          '${metric.date.day.toString().padLeft(2, '0')}/'
+                              '${metric.date.month.toString().padLeft(2, '0')}/${metric.date.year}',
+                          if (metric.measurements.isNotEmpty)
+                            metric.measurements.entries
+                                .map((e) => '${measurementLabelFr(e.key)} ${e.value.toStringAsFixed(0)} cm')
+                                .join(' · '),
+                        ].join(' — '),
                       ),
                     ),
                   ),

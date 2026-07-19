@@ -145,3 +145,22 @@ String equipmentLabelFr(String raw) {
   if (raw.isEmpty) return raw;
   return raw[0].toUpperCase() + raw.substring(1);
 }
+
+/// Fixed set of common body measurements — [BodyMetric.measurements] itself
+/// stays a free-form map, but the UI only offers these well-known keys.
+const bodyMeasurementKeys = ['waist', 'chest', 'arm', 'thigh'];
+
+String measurementLabelFr(String key) {
+  switch (key) {
+    case 'waist':
+      return 'Taille';
+    case 'chest':
+      return 'Poitrine';
+    case 'arm':
+      return 'Bras';
+    case 'thigh':
+      return 'Cuisse';
+    default:
+      return key;
+  }
+}
