@@ -49,6 +49,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
               targetWeightKg: e.targetWeightKg,
               targetRpe: e.targetRpe,
               notes: e.notes,
+              supersetGroup: e.supersetGroup,
             ),
           )
           .toList(),
@@ -87,6 +88,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
                 targetWeightKg: Value(ex.targetWeightKg),
                 targetRpe: Value(ex.targetRpe),
                 notes: Value(ex.notes),
+                supersetGroup: Value(ex.supersetGroup),
               ),
             );
       }
@@ -183,6 +185,36 @@ class DriftWorkoutRepository implements WorkoutRepository {
           );
     });
 
+    return _hydrateSession(sessionId);
+  }
+
+  @override
+  Future<WorkoutSession> updateSet({
+    required String sessionId,
+    required SetLog set,
+  }) async {
+    await (_db.update(_db.setLogs)..where((s) => s.id.equals(set.id))).write(
+      SetLogsCompanion(
+        setIndex: Value(set.setIndex),
+        targetReps: Value(set.targetReps),
+        actualReps: Value(set.actualReps),
+        weightKg: Value(set.weightKg),
+        rpe: Value(set.rpe),
+        rir: Value(set.rir),
+        isWarmup: Value(set.isWarmup),
+        completedAt: Value(set.completedAt),
+        restTakenSec: Value(set.restTakenSec),
+      ),
+    );
+    return _hydrateSession(sessionId);
+  }
+
+  @override
+  Future<WorkoutSession> deleteSet({
+    required String sessionId,
+    required String setId,
+  }) async {
+    await (_db.delete(_db.setLogs)..where((s) => s.id.equals(setId))).go();
     return _hydrateSession(sessionId);
   }
 

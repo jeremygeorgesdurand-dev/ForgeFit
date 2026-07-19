@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../application/providers/exercise_providers.dart';
+import '../../../application/providers/repository_providers.dart';
+import '../../../application/providers/user_providers.dart';
 import '../../../core/localization/fr_labels.dart';
 import '../../../domain/entities/exercise.dart';
 import '../../../domain/repositories/exercise_repository.dart';
@@ -16,11 +18,21 @@ class LibraryScreen extends ConsumerWidget {
     final exercisesAsync = ref.watch(filteredExercisesProvider);
     final filter = ref.watch(exerciseFilterProvider);
     final hasActiveFilter = filter.muscleGroup != null || filter.equipment != null;
+    final favoritesOnly = ref.watch(favoritesOnlyProvider);
+    final favoriteIds = ref.watch(favoriteExerciseIdsProvider).valueOrNull ?? const <String>{};
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bibliothèque'),
         actions: [
+          IconButton(
+            icon: Icon(
+              favoritesOnly ? Icons.star : Icons.star_border,
+              color: favoritesOnly ? Theme.of(context).colorScheme.secondary : null,
+            ),
+            tooltip: 'Favoris uniquement',
+            onPressed: () => ref.read(favoritesOnlyProvider.notifier).state = !favoritesOnly,
+          ),
           IconButton(
             icon: Icon(
               hasActiveFilter ? Icons.filter_alt : Icons.filter_list,
@@ -57,11 +69,16 @@ class LibraryScreen extends ConsumerWidget {
         ),
       ),
       body: exercisesAsync.when(
-        data: (exercises) => ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          itemCount: exercises.length,
-          itemBuilder: (context, index) => _ExerciseCard(exercise: exercises[index]),
-        ),
+        data: (exercises) => exercises.isEmpty && favoritesOnly
+            ? const Center(child: Text('Aucun favori pour le moment.'))
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                itemCount: exercises.length,
+                itemBuilder: (context, index) => _ExerciseCard(
+                  exercise: exercises[index],
+                  isFavorite: favoriteIds.contains(exercises[index].id),
+                ),
+              ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Erreur: $err')),
       ),
@@ -69,12 +86,13 @@ class LibraryScreen extends ConsumerWidget {
   }
 }
 
-class _ExerciseCard extends StatelessWidget {
+class _ExerciseCard extends ConsumerWidget {
   final Exercise exercise;
-  const _ExerciseCard({required this.exercise});
+  final bool isFavorite;
+  const _ExerciseCard({required this.exercise, required this.isFavorite});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -118,7 +136,16 @@ class _ExerciseCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.primary),
+              IconButton(
+                icon: Icon(
+                  isFavorite ? Icons.star : Icons.star_border,
+                  color: isFavorite ? Theme.of(context).colorScheme.secondary : null,
+                ),
+                onPressed: () async {
+                  await ref.read(favoritesRepositoryProvider).toggleFavorite(localUserId, exercise.id);
+                  ref.invalidate(favoriteExerciseIdsProvider);
+                },
+              ),
             ],
           ),
         ),

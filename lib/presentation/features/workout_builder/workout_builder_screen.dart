@@ -39,6 +39,19 @@ class _TemplateCard extends ConsumerWidget {
   final WorkoutTemplate template;
   const _TemplateCard({required this.template});
 
+  Future<void> _duplicate(WidgetRef ref) async {
+    await ref.read(workoutRepositoryProvider).saveTemplate(
+          WorkoutTemplate(
+            id: '',
+            userId: template.userId,
+            name: '${template.name} (copie)',
+            createdAt: DateTime.now(),
+            exercises: template.exercises,
+          ),
+        );
+    ref.invalidate(templatesProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
@@ -56,6 +69,11 @@ class _TemplateCard extends ConsumerWidget {
                 await ref.read(liveSessionControllerProvider.notifier).start(template: template);
                 if (context.mounted) context.go('/live');
               },
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy_outlined),
+              tooltip: 'Dupliquer',
+              onPressed: () => _duplicate(ref),
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/local/app_database.dart';
 import '../../data/datasources/local/exercises_dataset_loader.dart';
 import '../../data/repositories/drift_body_metrics_repository.dart';
+import '../../data/repositories/drift_favorites_repository.dart';
 import '../../data/repositories/drift_training_program_repository.dart';
 import '../../data/repositories/drift_user_repository.dart';
 import '../../data/repositories/drift_workout_repository.dart';
@@ -10,6 +11,7 @@ import '../../data/repositories/in_memory_progress_repository.dart';
 import '../../data/repositories/local_exercise_repository.dart';
 import '../../domain/repositories/body_metrics_repository.dart';
 import '../../domain/repositories/exercise_repository.dart';
+import '../../domain/repositories/favorites_repository.dart';
 import '../../domain/repositories/progress_repository.dart';
 import '../../domain/repositories/training_program_repository.dart';
 import '../../domain/repositories/user_repository.dart';
@@ -54,4 +56,8 @@ final bodyMetricsRepositoryProvider = Provider<BodyMetricsRepository>((ref) {
 
 final trainingProgramRepositoryProvider = Provider<TrainingProgramRepository>((ref) {
   return DriftTrainingProgramRepository(ref.watch(appDatabaseProvider));
+});
+
+final favoritesRepositoryProvider = Provider<FavoritesRepository>((ref) {
+  return DriftFavoritesRepository(ref.watch(appDatabaseProvider));
 });

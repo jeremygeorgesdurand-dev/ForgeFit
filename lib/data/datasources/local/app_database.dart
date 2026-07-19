@@ -49,6 +49,7 @@ part 'app_database.g.dart';
     BodyMetrics,
     TrainingPrograms,
     TrainingProgramTemplates,
+    FavoriteExercises,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -65,7 +66,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -79,6 +80,12 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await m.createTable(trainingPrograms);
             await m.createTable(trainingProgramTemplates);
+          }
+          if (from < 4) {
+            await m.createTable(favoriteExercises);
+          }
+          if (from < 5) {
+            await m.addColumn(workoutTemplateExercises, workoutTemplateExercises.supersetGroup);
           }
         },
       );

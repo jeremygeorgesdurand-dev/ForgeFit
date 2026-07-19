@@ -16,6 +16,7 @@ class _DraftExercise {
   int repMax;
   int restSec;
   double? weightKg;
+  int? supersetGroup;
 
   _DraftExercise({
     required this.exerciseId,
@@ -24,8 +25,11 @@ class _DraftExercise {
     this.repMax = 12,
     this.restSec = 90,
     this.weightKg,
+    this.supersetGroup,
   });
 }
+
+String _supersetLabel(int group) => 'Superset ${String.fromCharCode(64 + group)}';
 
 /// Highly-customizable session builder — set count, rep range, rest time,
 /// and optional target weight/RPE per exercise (PARTIE 5/6). Pass an
@@ -54,9 +58,34 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
                   repMax: e.targetRepRange.max,
                   restSec: e.targetRestSec,
                   weightKg: e.targetWeightKg,
+                  supersetGroup: e.supersetGroup,
                 ))
             .toList() ??
         [];
+  }
+
+  int _nextGroupId() {
+    final used = _drafts.map((d) => d.supersetGroup).whereType<int>().toSet();
+    var g = 1;
+    while (used.contains(g)) {
+      g++;
+    }
+    return g;
+  }
+
+  void _toggleSuperset(int index) {
+    final a = _drafts[index];
+    final b = _drafts[index + 1];
+    setState(() {
+      if (a.supersetGroup != null && a.supersetGroup == b.supersetGroup) {
+        a.supersetGroup = null;
+        b.supersetGroup = null;
+      } else {
+        final group = a.supersetGroup ?? b.supersetGroup ?? _nextGroupId();
+        a.supersetGroup = group;
+        b.supersetGroup = group;
+      }
+    });
   }
 
   @override
@@ -94,6 +123,7 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             targetRepRange: RepRange(_drafts[i].repMin, _drafts[i].repMax),
             targetRestSec: _drafts[i].restSec,
             targetWeightKg: _drafts[i].weightKg,
+            supersetGroup: _drafts[i].supersetGroup,
           ),
       ],
     );
@@ -132,12 +162,32 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
               padding: EdgeInsets.symmetric(vertical: 32),
               child: Center(child: Text('Ajoute des exercices avec le bouton +')),
             ),
-          for (var i = 0; i < _drafts.length; i++)
+          for (var i = 0; i < _drafts.length; i++) ...[
             _DraftExerciseCard(
               draft: _drafts[i],
               onRemove: () => setState(() => _drafts.removeAt(i)),
               onChanged: () => setState(() {}),
             ),
+            if (i < _drafts.length - 1)
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => _toggleSuperset(i),
+                  icon: Icon(
+                    _drafts[i].supersetGroup != null &&
+                            _drafts[i].supersetGroup == _drafts[i + 1].supersetGroup
+                        ? Icons.link
+                        : Icons.link_off,
+                    size: 16,
+                  ),
+                  label: Text(
+                    _drafts[i].supersetGroup != null &&
+                            _drafts[i].supersetGroup == _drafts[i + 1].supersetGroup
+                        ? 'Superset lié — délier'
+                        : 'Lier en superset',
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -177,6 +227,15 @@ class _DraftExerciseCard extends ConsumerWidget {
                     error: (_, __) => Text(draft.exerciseId),
                   ),
                 ),
+                if (draft.supersetGroup != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Chip(
+                      label: Text(_supersetLabel(draft.supersetGroup!)),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15),
+                    ),
+                  ),
                 IconButton(icon: const Icon(Icons.delete_outline), onPressed: onRemove),
               ],
             ),

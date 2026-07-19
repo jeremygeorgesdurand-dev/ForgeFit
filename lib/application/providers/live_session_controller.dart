@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/workout_session.dart';
@@ -21,6 +22,12 @@ class LiveSessionState {
   /// the UI once shown (PARTIE 7 — "badges de record").
   final String? recordBanner;
 
+  /// True for one state tick right after the rest countdown hits zero —
+  /// consumed and cleared by the UI, same pattern as [recordBanner]. The
+  /// controller also fires haptic feedback directly since that doesn't
+  /// need the UI at all.
+  final bool restJustCompleted;
+
   const LiveSessionState({
     this.template,
     this.session,
@@ -29,6 +36,7 @@ class LiveSessionState {
     this.restRemainingSec = 0,
     this.isResting = false,
     this.recordBanner,
+    this.restJustCompleted = false,
   });
 
   WorkoutTemplateExercise? get currentTemplateExercise {
@@ -49,6 +57,7 @@ class LiveSessionState {
     bool? isResting,
     String? recordBanner,
     bool clearRecordBanner = false,
+    bool? restJustCompleted,
   }) {
     return LiveSessionState(
       template: template ?? this.template,
@@ -59,6 +68,7 @@ class LiveSessionState {
       restRemainingSec: restRemainingSec ?? this.restRemainingSec,
       isResting: isResting ?? this.isResting,
       recordBanner: clearRecordBanner ? null : (recordBanner ?? this.recordBanner),
+      restJustCompleted: restJustCompleted ?? this.restJustCompleted,
     );
   }
 }
@@ -71,12 +81,23 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
   Timer? _restTimer;
   final _rng = Random();
 
+  /// When the previous set was actually completed — used to compute
+  /// [SetLog.restTakenSec] for the next one. Reset whenever there's no
+  /// meaningful "rest before this set" (session start, new exercise).
+  DateTime? _lastSetCompletedAt;
+
+  /// Warmup sets don't count toward the working-set target, so they need
+  /// their own index rather than borrowing [LiveSessionState.completedSetsForCurrentExercise].
+  int _warmupSetsForCurrentExercise = 0;
+
   LiveSessionController(this._ref) : super(const LiveSessionState());
 
   Future<void> start({WorkoutTemplate? template}) async {
     final session = await _ref
         .read(workoutRepositoryProvider)
         .startSession(userId: localUserId, templateId: template?.id);
+    _lastSetCompletedAt = null;
+    _warmupSetsForCurrentExercise = 0;
     state = LiveSessionState(template: template, session: session);
   }
 
@@ -85,6 +106,7 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
     required double weightKg,
     double? rpe,
     String? freeExerciseId,
+    bool isWarmup = false,
   }) async {
     final currentSession = state.session;
     final templateExercise = state.currentTemplateExercise;
@@ -93,19 +115,26 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
     final exerciseId = templateExercise?.exerciseId ?? freeExerciseId;
     if (exerciseId == null) return;
 
-    final baseline = await _bestPriorPerformance(exerciseId);
+    // Warmup sets never count as records — they're deliberately submaximal.
+    final baseline = isWarmup ? null : await _bestPriorPerformance(exerciseId);
 
-    final setId = '${DateTime.now().microsecondsSinceEpoch}-${_rng.nextInt(99999)}';
+    final now = DateTime.now();
+    final restTakenSec =
+        _lastSetCompletedAt == null ? 0 : now.difference(_lastSetCompletedAt!).inSeconds;
+
+    final setId = '${now.microsecondsSinceEpoch}-${_rng.nextInt(99999)}';
     final set = SetLog(
       id: setId,
-      setIndex: state.completedSetsForCurrentExercise,
+      setIndex: isWarmup ? _warmupSetsForCurrentExercise : state.completedSetsForCurrentExercise,
       targetReps: templateExercise?.targetRepRange.max ?? actualReps,
       actualReps: actualReps,
       weightKg: weightKg,
       rpe: rpe,
-      completedAt: DateTime.now(),
-      restTakenSec: 0,
+      isWarmup: isWarmup,
+      completedAt: now,
+      restTakenSec: restTakenSec,
     );
+    _lastSetCompletedAt = now;
 
     final updatedSession = await _ref.read(workoutRepositoryProvider).appendSet(
           sessionId: currentSession.id,
@@ -113,11 +142,23 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
           set: set,
         );
 
+    if (isWarmup) {
+      _warmupSetsForCurrentExercise++;
+      state = state.copyWith(session: updatedSession);
+      return;
+    }
+
     final newCompletedSets = state.completedSetsForCurrentExercise + 1;
     final targetSets = templateExercise?.targetSets ?? newCompletedSets;
-    final restSec = templateExercise?.targetRestSec ?? 90;
+    // Superset members share their round-ending rest with their paired
+    // exercise, not between their own sets — a short fixed rest instead.
+    final restSec = templateExercise?.supersetGroup != null
+        ? min(templateExercise!.targetRestSec, 20)
+        : (templateExercise?.targetRestSec ?? 90);
 
-    final record = _detectRecord(baseline, weightKg: weightKg, actualReps: actualReps);
+    final record = baseline == null
+        ? null
+        : _detectRecord(baseline, weightKg: weightKg, actualReps: actualReps);
 
     state = state.copyWith(
       session: updatedSession,
@@ -168,6 +209,32 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
     return null;
   }
 
+  /// Corrects a typo'd set (weight/reps/warmup flag) without touching
+  /// working-set counters — it's a data fix, not a new set.
+  Future<void> updateSet(SetLog updatedSet) async {
+    final session = state.session;
+    if (session == null) return;
+    final updated = await _ref
+        .read(workoutRepositoryProvider)
+        .updateSet(sessionId: session.id, set: updatedSet);
+    state = state.copyWith(session: updated);
+  }
+
+  /// Removes a mis-logged set. If it was a working (non-warmup) set for the
+  /// exercise currently in progress, the "Série X/Y" counter steps back so
+  /// the rest timer and target-set logic stay consistent.
+  Future<void> deleteSet(SetLog set) async {
+    final session = state.session;
+    if (session == null) return;
+    final updated = await _ref
+        .read(workoutRepositoryProvider)
+        .deleteSet(sessionId: session.id, setId: set.id);
+    final newCompleted = set.isWarmup
+        ? state.completedSetsForCurrentExercise
+        : max(0, state.completedSetsForCurrentExercise - 1);
+    state = state.copyWith(session: updated, completedSetsForCurrentExercise: newCompleted);
+  }
+
   void dismissRecordBanner() {
     state = state.copyWith(clearRecordBanner: true);
   }
@@ -179,11 +246,16 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
       final remaining = state.restRemainingSec - 1;
       if (remaining <= 0) {
         timer.cancel();
-        state = state.copyWith(isResting: false, restRemainingSec: 0);
+        HapticFeedback.mediumImpact();
+        state = state.copyWith(isResting: false, restRemainingSec: 0, restJustCompleted: true);
       } else {
         state = state.copyWith(restRemainingSec: remaining);
       }
     });
+  }
+
+  void dismissRestComplete() {
+    state = state.copyWith(restJustCompleted: false);
   }
 
   void skipRest() {
@@ -193,6 +265,8 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
 
   void nextExercise() {
     _restTimer?.cancel();
+    _lastSetCompletedAt = null;
+    _warmupSetsForCurrentExercise = 0;
     state = state.copyWith(
       currentExerciseIndex: state.currentExerciseIndex + 1,
       completedSetsForCurrentExercise: 0,

@@ -16,6 +16,12 @@ class WorkoutTemplateExercise {
   final double? targetRpe;
   final String? notes;
 
+  /// Exercises sharing the same non-null group are a superset: performed
+  /// back-to-back with a short rest between their own sets instead of the
+  /// full [targetRestSec] — the round-ending rest happens after the last
+  /// member, driven manually by moving to the next exercise.
+  final int? supersetGroup;
+
   const WorkoutTemplateExercise({
     required this.exerciseId,
     required this.order,
@@ -25,6 +31,7 @@ class WorkoutTemplateExercise {
     this.targetWeightKg,
     this.targetRpe,
     this.notes,
+    this.supersetGroup,
   });
 }
 

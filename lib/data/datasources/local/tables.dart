@@ -29,6 +29,7 @@ class WorkoutTemplateExercises extends Table {
   RealColumn get targetWeightKg => real().nullable()();
   RealColumn get targetRpe => real().nullable()();
   TextColumn get notes => text().nullable()();
+  IntColumn get supersetGroup => integer().nullable()();
 }
 
 @DataClassName('WorkoutSessionRow')
@@ -133,4 +134,13 @@ class TrainingProgramTemplates extends Table {
   // template is later deleted independently — the row is just orphaned.
   TextColumn get templateId => text()();
   IntColumn get sortOrder => integer()();
+}
+
+@DataClassName('FavoriteExerciseRow')
+class FavoriteExercises extends Table {
+  TextColumn get userId => text()();
+  TextColumn get exerciseId => text()();
+
+  @override
+  Set<Column> get primaryKey => {userId, exerciseId};
 }

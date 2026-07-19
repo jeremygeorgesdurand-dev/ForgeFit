@@ -10,6 +10,7 @@ import 'achievements_summary_card.dart';
 import 'body_silhouette.dart';
 import 'training_calendar.dart';
 import 'training_streak_card.dart';
+import 'training_volume_chart.dart';
 
 /// Overview: muscle-group silhouette, training calendar, and per-group
 /// score detail (PARTIE 7).
@@ -33,6 +34,8 @@ class DashboardScreen extends ConsumerWidget {
             BodySilhouette(
               scores: {for (final s in scores) s.muscleGroup: s},
             ),
+            const SizedBox(height: 16),
+            const TrainingVolumeChart(),
             const SizedBox(height: 16),
             const TrainingCalendar(),
             const SizedBox(height: 24),

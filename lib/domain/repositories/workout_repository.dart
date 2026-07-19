@@ -19,6 +19,16 @@ abstract class WorkoutRepository {
     required String exerciseId,
     required SetLog set,
   });
+  /// Corrects an already-logged set in place (fixing a typo'd weight/reps),
+  /// matched by [SetLog.id].
+  Future<WorkoutSession> updateSet({
+    required String sessionId,
+    required SetLog set,
+  });
+  Future<WorkoutSession> deleteSet({
+    required String sessionId,
+    required String setId,
+  });
   Future<WorkoutSession> completeSession(String sessionId);
   Future<List<WorkoutSession>> getHistory(String userId, {int limit = 50});
   Future<WorkoutSession?> findLastSimilarSession({
