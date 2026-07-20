@@ -294,6 +294,71 @@ class _ProgramDayCard extends ConsumerWidget {
   }
 }
 
+class _AdherenceIndicator extends ConsumerWidget {
+  final TrainingProgram program;
+  const _AdherenceIndicator({required this.program});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final adherenceAsync = ref.watch(programAdherenceProvider(program));
+    final scheme = Theme.of(context).colorScheme;
+
+    return adherenceAsync.when(
+      data: (adherence) {
+        final ratio = adherence.adherenceRatio;
+        if (ratio == null) {
+          return Text(
+            'Programme démarré récemment — pas encore assez de recul.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          );
+        }
+
+        final pct = (ratio * 100).clamp(0, 999).round();
+        final color = ratio >= 0.85
+            ? Colors.green
+            : ratio >= 0.5
+                ? Colors.orange
+                : scheme.error;
+
+        return Row(
+          children: [
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: ratio.clamp(0, 1).toDouble(),
+                    strokeWidth: 4,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                  Text('$pct%', style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${adherence.completedSessions} séance(s) faite(s) sur '
+                '${adherence.expectedSessions} attendue(s) depuis le début du programme',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const SizedBox(height: 16),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
 class _SavedProgramCard extends ConsumerStatefulWidget {
   final TrainingProgram program;
   const _SavedProgramCard({required this.program});
@@ -415,6 +480,8 @@ class _SavedProgramCardState extends ConsumerState<_SavedProgramCard> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            _AdherenceIndicator(program: widget.program),
             if (_expanded)
               templatesAsync.when(
                 data: (templates) {

@@ -4,6 +4,8 @@ enum TrainingGoal { strength, hypertrophy, endurance, fatLoss, generalFitness }
 
 enum UnitSystem { metric, imperial }
 
+enum AppThemeMode { system, light, dark }
+
 class EquipmentProfile {
   final String userId;
   final Set<String> availableEquipment;
@@ -27,6 +29,7 @@ class UserProfile {
   final UnitSystem preferredUnits;
   final int weeklyFrequencyTarget;
   final DateTime createdAt;
+  final AppThemeMode themeMode;
 
   const UserProfile({
     required this.id,
@@ -39,5 +42,6 @@ class UserProfile {
     this.preferredUnits = UnitSystem.metric,
     this.weeklyFrequencyTarget = 3,
     required this.createdAt,
+    this.themeMode = AppThemeMode.system,
   });
 }

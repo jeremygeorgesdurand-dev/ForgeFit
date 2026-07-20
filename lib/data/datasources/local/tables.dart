@@ -88,6 +88,7 @@ class UserProfiles extends Table {
   TextColumn get preferredUnits => text().withDefault(const Constant('metric'))();
   IntColumn get weeklyFrequencyTarget => integer().withDefault(const Constant(3))();
   DateTimeColumn get createdAt => dateTime()();
+  TextColumn get themePreference => text().withDefault(const Constant('system'))();
 
   @override
   Set<Column> get primaryKey => {id};

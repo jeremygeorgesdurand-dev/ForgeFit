@@ -33,6 +33,26 @@ class SettingsScreen extends ConsumerWidget {
       preferredUnits: unit,
       weeklyFrequencyTarget: profile.weeklyFrequencyTarget,
       createdAt: profile.createdAt,
+      themeMode: profile.themeMode,
+    );
+    await ref.read(userRepositoryProvider).saveProfile(updated);
+    ref.invalidate(currentUserProvider);
+  }
+
+  Future<void> _setThemeMode(WidgetRef ref, UserProfile profile, AppThemeMode mode) async {
+    if (profile.themeMode == mode) return;
+    final updated = UserProfile(
+      id: profile.id,
+      displayName: profile.displayName,
+      heightCm: profile.heightCm,
+      weightKg: profile.weightKg,
+      birthDate: profile.birthDate,
+      level: profile.level,
+      goals: profile.goals,
+      preferredUnits: profile.preferredUnits,
+      weeklyFrequencyTarget: profile.weeklyFrequencyTarget,
+      createdAt: profile.createdAt,
+      themeMode: mode,
     );
     await ref.read(userRepositoryProvider).saveProfile(updated);
     ref.invalidate(currentUserProvider);
@@ -239,6 +259,37 @@ class SettingsScreen extends ConsumerWidget {
                 onSelectionChanged: profile == null
                     ? null
                     : (selection) => _setUnit(ref, profile, selection.first),
+              ),
+            ),
+            const Divider(),
+            const ListTile(
+              title: Text('Apparence'),
+              subtitle: Text('Thème clair ou sombre'),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SegmentedButton<AppThemeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: AppThemeMode.system,
+                    label: Text('Système'),
+                    icon: Icon(Icons.brightness_auto),
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.light,
+                    label: Text('Clair'),
+                    icon: Icon(Icons.light_mode),
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.dark,
+                    label: Text('Sombre'),
+                    icon: Icon(Icons.dark_mode),
+                  ),
+                ],
+                selected: {profile?.themeMode ?? AppThemeMode.system},
+                onSelectionChanged: profile == null
+                    ? null
+                    : (selection) => _setThemeMode(ref, profile, selection.first),
               ),
             ),
             const Divider(),

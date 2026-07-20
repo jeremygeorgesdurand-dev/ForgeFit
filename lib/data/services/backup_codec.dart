@@ -51,6 +51,7 @@ class BackupCodec {
               'preferredUnits': profile.preferredUnits.name,
               'weeklyFrequencyTarget': profile.weeklyFrequencyTarget,
               'createdAt': profile.createdAt.toIso8601String(),
+              'themeMode': profile.themeMode.name,
             },
       'equipmentProfile': equipment == null
           ? null
@@ -162,6 +163,10 @@ class BackupCodec {
               createdAt: profileJson['createdAt'] == null
                   ? DateTime.now()
                   : DateTime.parse(profileJson['createdAt'] as String),
+              themeMode: AppThemeMode.values.firstWhere(
+                (t) => t.name == profileJson['themeMode'],
+                orElse: () => AppThemeMode.system,
+              ),
             ),
       equipmentProfile: equipmentJson == null
           ? null

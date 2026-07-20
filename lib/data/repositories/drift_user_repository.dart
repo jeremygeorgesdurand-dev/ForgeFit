@@ -38,6 +38,10 @@ class DriftUserRepository implements UserRepository {
       ),
       weeklyFrequencyTarget: row.weeklyFrequencyTarget,
       createdAt: row.createdAt,
+      themeMode: AppThemeMode.values.firstWhere(
+        (t) => t.name == row.themePreference,
+        orElse: () => AppThemeMode.system,
+      ),
     );
   }
 
@@ -55,6 +59,7 @@ class DriftUserRepository implements UserRepository {
             preferredUnits: Value(profile.preferredUnits.name),
             weeklyFrequencyTarget: Value(profile.weeklyFrequencyTarget),
             createdAt: profile.createdAt,
+            themePreference: Value(profile.themeMode.name),
           ),
         );
     return profile;
