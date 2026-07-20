@@ -242,6 +242,23 @@ class DriftWorkoutRepository implements WorkoutRepository {
   }
 
   @override
+  Future<void> deleteSession(String sessionId) async {
+    await _db.transaction(() async {
+      final exerciseRows = await (_db.select(_db.workoutSessionExercises)
+            ..where((e) => e.sessionId.equals(sessionId)))
+          .get();
+      for (final exRow in exerciseRows) {
+        await (_db.delete(_db.setLogs)..where((s) => s.sessionExerciseId.equals(exRow.id)))
+            .go();
+      }
+      await (_db.delete(_db.workoutSessionExercises)
+            ..where((e) => e.sessionId.equals(sessionId)))
+          .go();
+      await (_db.delete(_db.workoutSessions)..where((s) => s.id.equals(sessionId))).go();
+    });
+  }
+
+  @override
   Future<void> importSession(WorkoutSession session) async {
     await _db.transaction(() async {
       await _db.into(_db.workoutSessions).insertOnConflictUpdate(

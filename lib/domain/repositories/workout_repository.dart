@@ -39,6 +39,9 @@ abstract class WorkoutRepository {
   /// already present on [session] so re-importing the same export twice
   /// is idempotent rather than duplicating rows.
   Future<void> importSession(WorkoutSession session);
+  /// Permanently removes a session and every exercise/set logged under it —
+  /// for mis-started or duplicate sessions the user wants gone entirely.
+  Future<void> deleteSession(String sessionId);
   Future<List<WorkoutSession>> getHistory(String userId, {int limit = 50});
   Future<WorkoutSession?> findLastSimilarSession({
     required String userId,

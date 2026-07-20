@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../application/providers/achievement_providers.dart';
 import '../../../application/providers/exercise_providers.dart';
+import '../../../application/providers/progress_providers.dart';
+import '../../../application/providers/repository_providers.dart';
 import '../../../application/providers/user_providers.dart';
+import '../../../application/providers/workout_providers.dart';
 import '../../../core/units/weight_units.dart';
 import '../../../domain/entities/user_profile.dart';
 import '../../../domain/entities/workout_session.dart';
+import '../../widgets/confirm_dialog.dart';
 
 /// Full breakdown of a past session: every exercise and every set logged —
 /// the detail view the plain "date + volume" history list was missing.
@@ -13,13 +18,39 @@ class SessionDetailScreen extends ConsumerWidget {
   final WorkoutSession session;
   const SessionDetailScreen({super.key, required this.session});
 
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Supprimer cette séance ?',
+      message: 'Toutes les séries enregistrées pour cette séance seront définitivement supprimées.',
+      confirmLabel: 'Supprimer',
+    );
+    if (!confirmed) return;
+
+    await ref.read(workoutRepositoryProvider).deleteSession(session.id);
+    ref.invalidate(historyProvider);
+    ref.invalidate(personalRecordsProvider);
+    ref.invalidate(muscleGroupScoresProvider);
+    ref.invalidate(achievementsProvider);
+    if (context.mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final duration = session.durationSec;
     final unit = ref.watch(unitSystemProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Séance du ${_formatDate(session.startedAt)}')),
+      appBar: AppBar(
+        title: Text('Séance du ${_formatDate(session.startedAt)}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Supprimer la séance',
+            onPressed: () => _delete(context, ref),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
