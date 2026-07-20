@@ -7,10 +7,12 @@ import '../../../application/providers/user_providers.dart';
 import '../../../core/localization/fr_labels.dart';
 import '../../../core/units/weight_units.dart';
 import '../../../domain/entities/progress.dart';
+import '../../../domain/entities/user_profile.dart';
 
 /// Current personal best per exercise/record type — PARTIE 4 "Records".
 /// [PersonalRecordDetector] emits one event per historical PR; this screen
-/// only cares about the latest (highest-value) one per (exercise, type).
+/// shows the latest (highest-value) one per (exercise, type) as a chip,
+/// and the full progression history when a chip is tapped.
 class RecordsScreen extends ConsumerWidget {
   const RecordsScreen({super.key});
 
@@ -34,13 +36,21 @@ class RecordsScreen extends ConsumerWidget {
               ),
             );
           }
+          final byExercise = <String, List<PersonalRecord>>{};
+          for (final r in records) {
+            byExercise.putIfAbsent(r.exerciseId, () => []).add(r);
+          }
           final exerciseIds = bests.keys.toList();
           return ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: exerciseIds.length,
             itemBuilder: (context, index) {
               final exerciseId = exerciseIds[index];
-              return _ExerciseRecordsCard(exerciseId: exerciseId, byType: bests[exerciseId]!);
+              return _ExerciseRecordsCard(
+                exerciseId: exerciseId,
+                byType: bests[exerciseId]!,
+                allRecords: byExercise[exerciseId]!,
+              );
             },
           );
         },
@@ -66,7 +76,48 @@ class RecordsScreen extends ConsumerWidget {
 class _ExerciseRecordsCard extends ConsumerWidget {
   final String exerciseId;
   final Map<RecordType, PersonalRecord> byType;
-  const _ExerciseRecordsCard({required this.exerciseId, required this.byType});
+  final List<PersonalRecord> allRecords;
+  const _ExerciseRecordsCard({
+    required this.exerciseId,
+    required this.byType,
+    required this.allRecords,
+  });
+
+  void _showHistory(BuildContext context, UnitSystem unit, RecordType type) {
+    final history = allRecords.where((r) => r.type == type).toList()
+      ..sort((a, b) => b.achievedAt.compareTo(a.achievedAt));
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Progression — ${type.labelFr}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            for (final r in history)
+              ListTile(
+                leading: const Icon(Icons.emoji_events_outlined),
+                title: Text(
+                  type == RecordType.maxReps
+                      ? r.value.toStringAsFixed(1)
+                      : r.value.displayWeight(unit),
+                ),
+                subtitle: Text(
+                  '${r.achievedAt.day.toString().padLeft(2, '0')}/'
+                  '${r.achievedAt.month.toString().padLeft(2, '0')}/${r.achievedAt.year}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -91,13 +142,14 @@ class _ExerciseRecordsCard extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 for (final entry in byType.entries)
-                  Chip(
+                  ActionChip(
                     avatar: Icon(Icons.emoji_events, size: 16, color: scheme.secondary),
                     label: Text(
                       entry.key == RecordType.maxReps
                           ? '${entry.key.labelFr} : ${entry.value.value.toStringAsFixed(1)}'
                           : '${entry.key.labelFr} : ${entry.value.value.displayWeight(unit)}',
                     ),
+                    onPressed: () => _showHistory(context, unit, entry.key),
                   ),
               ],
             ),
