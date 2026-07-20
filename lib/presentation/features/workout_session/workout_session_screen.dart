@@ -6,6 +6,7 @@ import '../../../application/providers/exercise_providers.dart';
 import '../../../application/providers/live_session_controller.dart';
 import '../../../application/providers/user_providers.dart';
 import '../../../application/providers/workout_providers.dart';
+import '../../../core/localization/fr_labels.dart';
 import '../../../core/units/weight_units.dart';
 import '../../../domain/entities/exercise.dart';
 import '../../../domain/entities/user_profile.dart';
@@ -13,6 +14,8 @@ import '../../../domain/entities/workout_session.dart';
 import '../../../domain/entities/workout_template.dart';
 import '../../../domain/services/next_session_suggestion.dart';
 import '../../../domain/services/warmup_calculator.dart';
+import '../../widgets/confirm_dialog.dart';
+import '../library/exercise_picker_screen.dart';
 
 String _supersetLabelFor(int group) => 'Superset ${String.fromCharCode(64 + group)}';
 
@@ -179,7 +182,7 @@ class _ActiveSessionViewState extends ConsumerState<_ActiveSessionView> {
     final state = widget.state;
     final templateExercise = state.currentTemplateExercise;
     final isFreeSession = state.template == null;
-    final currentExerciseId = templateExercise?.exerciseId ?? _freeExercise?.id;
+    final currentExerciseId = state.effectiveExerciseId ?? _freeExercise?.id;
     final unit = ref.watch(unitSystemProvider);
 
     WorkoutSessionExercise? currentSessionExercise;
@@ -229,8 +232,13 @@ class _ActiveSessionViewState extends ConsumerState<_ActiveSessionView> {
         children: [
           if (isFreeSession)
             _FreeExercisePicker(exercise: _freeExercise, onPick: _pickFreeExercise)
-          else if (templateExercise != null)
-            _CurrentExerciseHeader(exerciseId: templateExercise.exerciseId),
+          else if (templateExercise != null && currentExerciseId != null)
+            _CurrentExerciseHeader(
+              exerciseId: currentExerciseId,
+              hasLoggedSets: state.completedSetsForCurrentExercise > 0,
+              onSubstitute: (newId) =>
+                  ref.read(liveSessionControllerProvider.notifier).substituteExercise(newId),
+            ),
           const SizedBox(height: 8),
           if (templateExercise != null) ...[
             Text(
@@ -375,16 +383,126 @@ class _ActiveSessionViewState extends ConsumerState<_ActiveSessionView> {
 
 class _CurrentExerciseHeader extends ConsumerWidget {
   final String exerciseId;
-  const _CurrentExerciseHeader({required this.exerciseId});
+  final bool hasLoggedSets;
+  final ValueChanged<String> onSubstitute;
+  const _CurrentExerciseHeader({
+    required this.exerciseId,
+    required this.hasLoggedSets,
+    required this.onSubstitute,
+  });
+
+  Future<void> _openSubstituteSheet(BuildContext context, WidgetRef ref) async {
+    if (hasLoggedSets) {
+      final confirmed = await confirmDialog(
+        context,
+        title: 'Remplacer cet exercice ?',
+        message: 'Des séries sont déjà enregistrées pour cet exercice dans la séance. '
+            'Le compteur de séries repart à zéro pour le nouvel exercice.',
+        confirmLabel: 'Remplacer',
+      );
+      if (!confirmed) return;
+    }
+    if (!context.mounted) return;
+
+    final selected = await showModalBottomSheet<Exercise>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _SubstituteExerciseSheet(exerciseId: exerciseId),
+    );
+    if (selected != null) onSubstitute(selected.id);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final exerciseAsync = ref.watch(exerciseByIdProvider(exerciseId));
     return exerciseAsync.when(
-      data: (e) => Text(e?.name ?? exerciseId, style: Theme.of(context).textTheme.headlineSmall),
+      data: (e) => Row(
+        children: [
+          Expanded(
+            child: Text(e?.name ?? exerciseId, style: Theme.of(context).textTheme.headlineSmall),
+          ),
+          IconButton(
+            icon: const Icon(Icons.swap_horiz),
+            tooltip: 'Remplacer l\'exercice',
+            onPressed: () => _openSubstituteSheet(context, ref),
+          ),
+        ],
+      ),
       loading: () => const SizedBox(height: 24),
       error: (_, __) => Text(exerciseId),
     );
+  }
+}
+
+class _SubstituteExerciseSheet extends ConsumerWidget {
+  final String exerciseId;
+  const _SubstituteExerciseSheet({required this.exerciseId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final similarAsync = ref.watch(similarExercisesProvider(exerciseId));
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Remplacer par...', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            similarAsync.when(
+              data: (similar) => similar.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Aucun exercice similaire trouvé.'),
+                    )
+                  : Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final e in similar)
+                            ListTile(
+                              title: Text(e.name),
+                              subtitle: Text('${e.primaryMuscle.labelFr} · ${equipmentLabelFr(e.equipment)}'),
+                              onTap: () => Navigator.of(context).pop(e),
+                            ),
+                        ],
+                      ),
+                    ),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            const Divider(),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.search),
+              label: const Text('Chercher un autre exercice'),
+              onPressed: () async {
+                final picked = await Navigator.of(context).push<Exercise>(
+                  MaterialPageRoute(builder: (_) => const _PickerRouteBridge()),
+                );
+                if (picked != null && context.mounted) Navigator.of(context).pop(picked);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The exercise picker is normally reached via go_router (`/exercise-picker`),
+/// but a modal bottom sheet's `Navigator` isn't the router's navigator, so
+/// pushing the named route here would escape the sheet instead of layering
+/// on top of it. This bridges to the same screen via a plain [MaterialPageRoute].
+class _PickerRouteBridge extends StatelessWidget {
+  const _PickerRouteBridge();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExercisePickerScreen();
   }
 }
 

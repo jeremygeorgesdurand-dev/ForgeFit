@@ -28,6 +28,12 @@ class LiveSessionState {
   /// need the UI at all.
   final bool restJustCompleted;
 
+  /// This-session-only exercise swaps, keyed by template exercise index.
+  /// The saved template is never touched — swapping only changes which
+  /// exercise the *current* session logs sets against (e.g. equipment is
+  /// taken, or an injury rules an exercise out for today).
+  final Map<int, String> substitutions;
+
   const LiveSessionState({
     this.template,
     this.session,
@@ -37,6 +43,7 @@ class LiveSessionState {
     this.isResting = false,
     this.recordBanner,
     this.restJustCompleted = false,
+    this.substitutions = const {},
   });
 
   WorkoutTemplateExercise? get currentTemplateExercise {
@@ -44,6 +51,11 @@ class LiveSessionState {
     if (t == null || currentExerciseIndex >= t.exercises.length) return null;
     return t.exercises[currentExerciseIndex];
   }
+
+  /// The exercise actually being trained right now: the substitution for
+  /// this slot if one was made, otherwise the template's own exercise.
+  String? get effectiveExerciseId =>
+      substitutions[currentExerciseIndex] ?? currentTemplateExercise?.exerciseId;
 
   bool get isLastExercise =>
       template == null || currentExerciseIndex >= template!.exercises.length - 1;
@@ -58,6 +70,7 @@ class LiveSessionState {
     String? recordBanner,
     bool clearRecordBanner = false,
     bool? restJustCompleted,
+    Map<int, String>? substitutions,
   }) {
     return LiveSessionState(
       template: template ?? this.template,
@@ -69,6 +82,7 @@ class LiveSessionState {
       isResting: isResting ?? this.isResting,
       recordBanner: clearRecordBanner ? null : (recordBanner ?? this.recordBanner),
       restJustCompleted: restJustCompleted ?? this.restJustCompleted,
+      substitutions: substitutions ?? this.substitutions,
     );
   }
 }
@@ -112,7 +126,7 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
     final templateExercise = state.currentTemplateExercise;
     if (currentSession == null) return;
 
-    final exerciseId = templateExercise?.exerciseId ?? freeExerciseId;
+    final exerciseId = state.effectiveExerciseId ?? freeExerciseId;
     if (exerciseId == null) return;
 
     // Warmup sets never count as records — they're deliberately submaximal.
@@ -237,6 +251,18 @@ class LiveSessionController extends StateNotifier<LiveSessionState> {
 
   void dismissRecordBanner() {
     state = state.copyWith(clearRecordBanner: true);
+  }
+
+  /// Swaps the exercise in the current template slot for [newExerciseId],
+  /// for this session only. Resets this slot's working-set counter since
+  /// the new exercise has no sets logged yet.
+  void substituteExercise(String newExerciseId) {
+    if (state.template == null) return;
+    _lastSetCompletedAt = null;
+    _warmupSetsForCurrentExercise = 0;
+    final updated = Map<int, String>.from(state.substitutions);
+    updated[state.currentExerciseIndex] = newExerciseId;
+    state = state.copyWith(substitutions: updated, completedSetsForCurrentExercise: 0);
   }
 
   void _startRest(int seconds) {
