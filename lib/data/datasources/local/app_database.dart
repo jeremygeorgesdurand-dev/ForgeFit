@@ -95,4 +95,22 @@ class AppDatabase extends _$AppDatabase {
           }
         },
       );
+
+  /// Wipes every user-owned table — irreversible, only meant to be called
+  /// from an explicit "reset all data" action behind its own confirmation.
+  Future<void> resetAllData() async {
+    await transaction(() async {
+      await delete(setLogs).go();
+      await delete(workoutSessionExercises).go();
+      await delete(workoutSessions).go();
+      await delete(workoutTemplateExercises).go();
+      await delete(workoutTemplates).go();
+      await delete(trainingProgramTemplates).go();
+      await delete(trainingPrograms).go();
+      await delete(favoriteExercises).go();
+      await delete(bodyMetrics).go();
+      await delete(equipmentProfiles).go();
+      await delete(userProfiles).go();
+    });
+  }
 }

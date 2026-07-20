@@ -1,3 +1,4 @@
+import '../../core/localization/fr_labels.dart';
 import '../../domain/entities/exercise.dart';
 import '../../domain/entities/muscle_group.dart';
 import '../../domain/repositories/exercise_repository.dart';
@@ -88,7 +89,17 @@ class LocalExerciseRepository implements ExerciseRepository {
       }
       if (filter.searchQuery != null && filter.searchQuery!.isNotEmpty) {
         final q = filter.searchQuery!.toLowerCase();
-        if (!e.name.toLowerCase().contains(q)) return false;
+        // The dataset only has English exercise names, so also match the
+        // French muscle/equipment labels shown in the UI — lets someone
+        // type "pectoraux" or "haltère" and still find something, even
+        // without knowing the English exercise name.
+        final haystack = [
+          e.name,
+          e.primaryMuscle.labelFr,
+          equipmentLabelFr(e.equipment),
+          for (final m in e.secondaryMuscles) m.labelFr,
+        ].join(' ').toLowerCase();
+        if (!haystack.contains(q)) return false;
       }
       return true;
     }).toList();

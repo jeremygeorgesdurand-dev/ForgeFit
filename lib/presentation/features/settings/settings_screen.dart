@@ -3,10 +3,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../application/providers/achievement_providers.dart';
+import '../../../application/providers/body_metrics_providers.dart';
+import '../../../application/providers/exercise_providers.dart';
+import '../../../application/providers/progress_providers.dart';
 import '../../../application/providers/repository_providers.dart';
+import '../../../application/providers/training_program_providers.dart';
 import '../../../application/providers/user_providers.dart';
+import '../../../application/providers/workout_providers.dart';
 import '../../../domain/entities/user_profile.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -111,6 +119,30 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _resetAllData(BuildContext context, WidgetRef ref) async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Réinitialiser toutes les données ?',
+      message: 'Profil, séances, historique, records, succès, mesures — tout sera '
+          'définitivement supprimé. Cette action est irréversible.',
+      confirmLabel: 'Tout supprimer',
+    );
+    if (!confirmed) return;
+
+    await ref.read(appDatabaseProvider).resetAllData();
+    ref.invalidate(currentUserProvider);
+    ref.invalidate(templatesProvider);
+    ref.invalidate(historyProvider);
+    ref.invalidate(personalRecordsProvider);
+    ref.invalidate(muscleGroupScoresProvider);
+    ref.invalidate(achievementsProvider);
+    ref.invalidate(favoriteExerciseIdsProvider);
+    ref.invalidate(trainingProgramsProvider);
+    ref.invalidate(bodyMetricsHistoryProvider);
+
+    if (context.mounted) context.go('/onboarding');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProvider);
@@ -157,6 +189,16 @@ class SettingsScreen extends ConsumerWidget {
                 'Base d\'exercices : © hasaneyldrm/exercises-dataset (MIT).\n'
                 'Médias (images/GIFs) : © Gym visual — https://gymvisual.com/',
               ),
+            ),
+            const Divider(),
+            ListTile(
+              title: Text(
+                'Réinitialiser toutes les données',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              subtitle: const Text('Supprime définitivement tout ce qui est stocké dans l\'app'),
+              trailing: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
+              onTap: () => _resetAllData(context, ref),
             ),
           ],
         ),
