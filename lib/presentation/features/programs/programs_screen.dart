@@ -13,6 +13,7 @@ import '../../../domain/entities/ai_program.dart';
 import '../../../domain/entities/training_program.dart';
 import '../../../domain/entities/user_profile.dart';
 import '../../../domain/entities/workout_template.dart';
+import '../../widgets/confirm_dialog.dart';
 import '../../../domain/services/program_generator.dart';
 
 /// Rule-based program generation only (PARTIE 6) — no LLM. A generated
@@ -305,6 +306,13 @@ class _SavedProgramCardState extends ConsumerState<_SavedProgramCard> {
   bool _expanded = false;
 
   Future<void> _delete() async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Supprimer ce programme ?',
+      message: '"${widget.program.name}" sera définitivement supprimé. '
+          'Les séances déjà ajoutées à Mes séances resteront disponibles.',
+    );
+    if (!confirmed) return;
     await ref.read(trainingProgramRepositoryProvider).deleteProgram(widget.program.id);
     ref.invalidate(trainingProgramsProvider);
   }

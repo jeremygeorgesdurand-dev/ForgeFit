@@ -6,6 +6,7 @@ import '../../../application/providers/live_session_controller.dart';
 import '../../../application/providers/repository_providers.dart';
 import '../../../application/providers/workout_providers.dart';
 import '../../../domain/entities/workout_template.dart';
+import '../../widgets/confirm_dialog.dart';
 
 class WorkoutBuilderScreen extends ConsumerWidget {
   const WorkoutBuilderScreen({super.key});
@@ -79,6 +80,12 @@ class _TemplateCard extends ConsumerWidget {
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Supprimer',
               onPressed: () async {
+                final confirmed = await confirmDialog(
+                  context,
+                  title: 'Supprimer cette séance ?',
+                  message: '"${template.name}" sera définitivement supprimée.',
+                );
+                if (!confirmed) return;
                 await ref.read(workoutRepositoryProvider).deleteTemplate(template.id);
                 ref.invalidate(templatesProvider);
               },

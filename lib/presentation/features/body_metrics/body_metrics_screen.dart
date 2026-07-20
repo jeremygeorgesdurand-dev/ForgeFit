@@ -87,6 +87,19 @@ class _BodyMetricsScreenState extends ConsumerState<BodyMetricsScreen> {
   Future<void> _delete(BodyMetric metric) async {
     await ref.read(bodyMetricsRepositoryProvider).deleteMetric(metric.userId, metric.date);
     ref.invalidate(bodyMetricsHistoryProvider);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Mesure supprimée'),
+        action: SnackBarAction(
+          label: 'Annuler',
+          onPressed: () async {
+            await ref.read(bodyMetricsRepositoryProvider).logMetric(metric);
+            ref.invalidate(bodyMetricsHistoryProvider);
+          },
+        ),
+      ),
+    );
   }
 
   @override
