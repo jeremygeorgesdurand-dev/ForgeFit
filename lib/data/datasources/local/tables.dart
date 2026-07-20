@@ -147,3 +147,16 @@ class FavoriteExercises extends Table {
   @override
   Set<Column> get primaryKey => {userId, exerciseId};
 }
+
+@DataClassName('ScheduledSessionRow')
+class ScheduledSessions extends Table {
+  TextColumn get id => text()();
+  TextColumn get userId => text()();
+  // Not a FK: keeping a planned entry even if its template is later
+  // deleted is more honest than silently losing the user's plan.
+  TextColumn get templateId => text()();
+  DateTimeColumn get date => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

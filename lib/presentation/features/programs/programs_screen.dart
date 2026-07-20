@@ -322,6 +322,45 @@ class _SavedProgramCardState extends ConsumerState<_SavedProgramCard> {
     if (mounted) context.go('/live');
   }
 
+  Future<void> _rename() async {
+    final controller = TextEditingController(text: widget.program.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renommer le programme'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+    if (newName == null || newName.isEmpty || newName == widget.program.name) return;
+
+    await ref.read(trainingProgramRepositoryProvider).saveProgram(
+          TrainingProgram(
+            id: widget.program.id,
+            userId: widget.program.userId,
+            name: newName,
+            goal: widget.program.goal,
+            level: widget.program.level,
+            createdAt: widget.program.createdAt,
+            templateIds: widget.program.templateIds,
+          ),
+        );
+    ref.invalidate(trainingProgramsProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final templatesAsync = ref.watch(templatesProvider);
@@ -362,6 +401,11 @@ class _SavedProgramCardState extends ConsumerState<_SavedProgramCard> {
                   ),
                 ),
                 IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Renommer',
+                  onPressed: _rename,
+                ),
+                IconButton(
                   icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
@@ -383,6 +427,10 @@ class _SavedProgramCardState extends ConsumerState<_SavedProgramCard> {
                             contentPadding: EdgeInsets.zero,
                             title: Text(byId[id]!.name),
                             subtitle: Text('${byId[id]!.exercises.length} exercices'),
+                            onTap: () => context.push<void>(
+                              '/builder/${byId[id]!.id}/edit',
+                              extra: byId[id],
+                            ),
                             trailing: IconButton(
                               icon: const Icon(Icons.play_arrow),
                               onPressed: () => _start(byId[id]!),

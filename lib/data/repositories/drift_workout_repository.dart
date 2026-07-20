@@ -241,6 +241,63 @@ class DriftWorkoutRepository implements WorkoutRepository {
     return _hydrateSession(sessionId);
   }
 
+  @override
+  Future<void> importSession(WorkoutSession session) async {
+    await _db.transaction(() async {
+      await _db.into(_db.workoutSessions).insertOnConflictUpdate(
+            WorkoutSessionsCompanion.insert(
+              id: session.id,
+              userId: session.userId,
+              templateId: Value(session.templateId),
+              startedAt: session.startedAt,
+              endedAt: Value(session.endedAt),
+              status: Value(session.status.name),
+              notes: Value(session.notes),
+            ),
+          );
+
+      for (final ex in session.exercises) {
+        var sessionExercise = await (_db.select(_db.workoutSessionExercises)
+              ..where(
+                (e) => e.sessionId.equals(session.id) & e.exerciseId.equals(ex.exerciseId),
+              ))
+            .getSingleOrNull();
+
+        int sessionExerciseId;
+        if (sessionExercise == null) {
+          sessionExerciseId = await _db.into(_db.workoutSessionExercises).insert(
+                WorkoutSessionExercisesCompanion.insert(
+                  sessionId: session.id,
+                  exerciseId: ex.exerciseId,
+                  sortOrder: ex.order,
+                ),
+              );
+        } else {
+          sessionExerciseId = sessionExercise.id;
+        }
+
+        for (final set in ex.sets) {
+          final setId = set.id.isEmpty ? _newId() : set.id;
+          await _db.into(_db.setLogs).insertOnConflictUpdate(
+                SetLogsCompanion.insert(
+                  id: setId,
+                  sessionExerciseId: sessionExerciseId,
+                  setIndex: set.setIndex,
+                  targetReps: set.targetReps,
+                  actualReps: set.actualReps,
+                  weightKg: set.weightKg,
+                  rpe: Value(set.rpe),
+                  rir: Value(set.rir),
+                  isWarmup: Value(set.isWarmup),
+                  completedAt: set.completedAt,
+                  restTakenSec: set.restTakenSec,
+                ),
+              );
+        }
+      }
+    });
+  }
+
   Future<WorkoutSession> _hydrateSession(String sessionId) async {
     final row = await (_db.select(_db.workoutSessions)
           ..where((s) => s.id.equals(sessionId)))

@@ -34,6 +34,11 @@ abstract class WorkoutRepository {
     required String sessionId,
     required String? notes,
   });
+  /// Restores a full session tree (used by the data-import flow) —
+  /// upserts the session, its exercises, and every set, honoring the ids
+  /// already present on [session] so re-importing the same export twice
+  /// is idempotent rather than duplicating rows.
+  Future<void> importSession(WorkoutSession session);
   Future<List<WorkoutSession>> getHistory(String userId, {int limit = 50});
   Future<WorkoutSession?> findLastSimilarSession({
     required String userId,

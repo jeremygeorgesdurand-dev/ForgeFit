@@ -13,6 +13,7 @@ import '../../../application/providers/repository_providers.dart';
 import '../../../application/providers/training_program_providers.dart';
 import '../../../application/providers/user_providers.dart';
 import '../../../application/providers/workout_providers.dart';
+import '../../../data/services/backup_codec.dart';
 import '../../../domain/entities/user_profile.dart';
 import '../../widgets/confirm_dialog.dart';
 
@@ -38,57 +39,26 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _exportData(BuildContext context, WidgetRef ref, UserProfile? profile) async {
+    final equipment = await ref.read(userRepositoryProvider).getEquipmentProfile(localUserId);
     final templates = await ref.read(workoutRepositoryProvider).getTemplates(localUserId);
     final history = await ref.read(workoutRepositoryProvider).getHistory(localUserId, limit: 10000);
+    final programs = await ref.read(trainingProgramRepositoryProvider).getPrograms(localUserId);
+    final bodyMetrics = await ref.read(bodyMetricsRepositoryProvider).getHistory(localUserId, limit: 10000);
+    final favoriteIds = await ref.read(favoritesRepositoryProvider).getFavoriteExerciseIds(localUserId);
 
-    final data = {
-      'exportedAt': DateTime.now().toIso8601String(),
-      'profile': profile == null
-          ? null
-          : {
-              'displayName': profile.displayName,
-              'level': profile.level.name,
-              'goals': profile.goals.map((g) => g.name).toList(),
-              'heightCm': profile.heightCm,
-              'weightKg': profile.weightKg,
-              'weeklyFrequencyTarget': profile.weeklyFrequencyTarget,
-            },
-      'templates': templates
-          .map((t) => {
-                'name': t.name,
-                'exercises': t.exercises
-                    .map((e) => {
-                          'exerciseId': e.exerciseId,
-                          'targetSets': e.targetSets,
-                          'targetRepRange': '${e.targetRepRange.min}-${e.targetRepRange.max}',
-                          'targetRestSec': e.targetRestSec,
-                        })
-                    .toList(),
-              })
-          .toList(),
-      'sessions': history
-          .map((s) => {
-                'startedAt': s.startedAt.toIso8601String(),
-                'endedAt': s.endedAt?.toIso8601String(),
-                'totalVolumeKg': s.totalVolumeKg,
-                'exercises': s.exercises
-                    .map((e) => {
-                          'exerciseId': e.exerciseId,
-                          'sets': e.sets
-                              .map((set) => {
-                                    'reps': set.actualReps,
-                                    'weightKg': set.weightKg,
-                                    'rpe': set.rpe,
-                                    'isWarmup': set.isWarmup,
-                                  })
-                              .toList(),
-                        })
-                    .toList(),
-              })
-          .toList(),
-    };
-
-    final json = const JsonEncoder.withIndent('  ').convert(data);
+    final json = const JsonEncoder.withIndent('  ').convert(
+      BackupCodec.encode(
+        BackupData(
+          profile: profile,
+          equipmentProfile: equipment,
+          templates: templates,
+          sessions: history,
+          trainingPrograms: programs,
+          bodyMetrics: bodyMetrics,
+          favoriteExerciseIds: favoriteIds.toList(),
+        ),
+      ),
+    );
     if (!context.mounted) return;
 
     await showDialog<void>(
@@ -117,6 +87,108 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _importData(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final clipboard = await Clipboard.getData('text/plain');
+    if (clipboard?.text != null && clipboard!.text!.trim().startsWith('{')) {
+      controller.text = clipboard.text!;
+    }
+    if (!context.mounted) return;
+
+    final json = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Importer des données'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: controller,
+            maxLines: 10,
+            decoration: const InputDecoration(
+              hintText: 'Colle ici le JSON exporté depuis Export des données',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Importer'),
+          ),
+        ],
+      ),
+    );
+    if (json == null || json.trim().isEmpty) return;
+
+    BackupData data;
+    try {
+      data = BackupCodec.decode(jsonDecode(json) as Map<String, dynamic>, userId: localUserId);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('JSON invalide : $e')),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Importer ces données ?',
+      message: 'Profil, ${data.templates.length} séance(s), ${data.sessions.length} entrée(s) '
+          'd\'historique, ${data.trainingPrograms.length} programme(s) et ${data.bodyMetrics.length} '
+          'mesure(s) seront fusionnés avec ce qui existe déjà (mêmes ids = remplacés).',
+      confirmLabel: 'Importer',
+    );
+    if (!confirmed) return;
+
+    if (data.profile != null) {
+      await ref.read(userRepositoryProvider).saveProfile(data.profile!);
+    }
+    if (data.equipmentProfile != null) {
+      await ref.read(userRepositoryProvider).saveEquipmentProfile(data.equipmentProfile!);
+    }
+    for (final template in data.templates) {
+      await ref.read(workoutRepositoryProvider).saveTemplate(template);
+    }
+    for (final session in data.sessions) {
+      await ref.read(workoutRepositoryProvider).importSession(session);
+    }
+    for (final program in data.trainingPrograms) {
+      await ref.read(trainingProgramRepositoryProvider).saveProgram(program);
+    }
+    for (final metric in data.bodyMetrics) {
+      await ref.read(bodyMetricsRepositoryProvider).logMetric(metric);
+    }
+    final alreadyFavorited = await ref.read(favoritesRepositoryProvider).getFavoriteExerciseIds(localUserId);
+    for (final exerciseId in data.favoriteExerciseIds) {
+      if (!alreadyFavorited.contains(exerciseId)) {
+        await ref.read(favoritesRepositoryProvider).toggleFavorite(localUserId, exerciseId);
+      }
+    }
+
+    ref.invalidate(currentUserProvider);
+    ref.invalidate(templatesProvider);
+    ref.invalidate(historyProvider);
+    ref.invalidate(personalRecordsProvider);
+    ref.invalidate(muscleGroupScoresProvider);
+    ref.invalidate(achievementsProvider);
+    ref.invalidate(favoriteExerciseIdsProvider);
+    ref.invalidate(trainingProgramsProvider);
+    ref.invalidate(bodyMetricsHistoryProvider);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Import terminé')),
+      );
+    }
   }
 
   Future<void> _resetAllData(BuildContext context, WidgetRef ref) async {
@@ -181,6 +253,12 @@ class SettingsScreen extends ConsumerWidget {
               subtitle: const Text('Copier ton historique et tes programmes en JSON'),
               trailing: const Icon(Icons.download_outlined),
               onTap: () => _exportData(context, ref, profile),
+            ),
+            ListTile(
+              title: const Text('Importer des données'),
+              subtitle: const Text('Restaurer depuis un export JSON'),
+              trailing: const Icon(Icons.upload_outlined),
+              onTap: () => _importData(context, ref),
             ),
             const Divider(),
             const ListTile(
