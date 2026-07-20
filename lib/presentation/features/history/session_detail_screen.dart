@@ -44,6 +44,28 @@ class SessionDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
+          if (session.notes != null && session.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.notes, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Text('Notes', style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(session.notes!),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           for (final exercise in session.exercises)
             _SessionExerciseCard(exercise: exercise, unit: unit),

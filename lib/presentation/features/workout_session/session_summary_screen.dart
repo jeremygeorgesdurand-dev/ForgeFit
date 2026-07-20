@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../application/providers/achievement_providers.dart';
+import '../../../application/providers/repository_providers.dart';
 import '../../../application/providers/user_providers.dart';
 import '../../../application/providers/workout_providers.dart';
 import '../../../core/units/weight_units.dart';
@@ -86,6 +87,8 @@ class SessionSummaryScreen extends ConsumerWidget {
           ),
           _NewAchievementsBanner(session: session),
           const SizedBox(height: 24),
+          _SessionNotesField(session: session),
+          const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () => context.go('/dashboard'),
             child: const Text('Retour au dashboard'),
@@ -154,6 +157,84 @@ class _NewAchievementsBanner extends ConsumerWidget {
       },
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _SessionNotesField extends ConsumerStatefulWidget {
+  final WorkoutSession session;
+  const _SessionNotesField({required this.session});
+
+  @override
+  ConsumerState<_SessionNotesField> createState() => _SessionNotesFieldState();
+}
+
+class _SessionNotesFieldState extends ConsumerState<_SessionNotesField> {
+  late final TextEditingController _controller;
+  bool _saving = false;
+  bool _saved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.session.notes ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final trimmed = _controller.text.trim();
+      await ref.read(workoutRepositoryProvider).updateSessionNotes(
+            sessionId: widget.session.id,
+            notes: trimmed.isEmpty ? null : trimmed,
+          );
+      ref.invalidate(historyProvider);
+      if (mounted) setState(() => _saved = true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Notes de séance', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _controller,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Sensations, douleurs, contexte…',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (_) {
+            if (_saved) setState(() => _saved = false);
+          },
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(_saved ? Icons.check : Icons.save_outlined, size: 16),
+            label: Text(_saved ? 'Enregistré' : 'Enregistrer'),
+          ),
+        ),
+      ],
     );
   }
 }

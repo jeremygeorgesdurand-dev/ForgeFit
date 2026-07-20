@@ -50,6 +50,7 @@ class WorkoutSession {
   final DateTime? endedAt;
   final SessionStatus status;
   final List<WorkoutSessionExercise> exercises;
+  final String? notes;
 
   const WorkoutSession({
     required this.id,
@@ -59,6 +60,7 @@ class WorkoutSession {
     this.endedAt,
     this.status = SessionStatus.inProgress,
     this.exercises = const [],
+    this.notes,
   });
 
   double get totalVolumeKg =>

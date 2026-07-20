@@ -41,6 +41,7 @@ class WorkoutSessions extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   // Stored as text: inProgress | completed | aborted (see SessionStatus).
   TextColumn get status => text().withDefault(const Constant('inProgress'))();
+  TextColumn get notes => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

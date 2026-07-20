@@ -30,6 +30,10 @@ abstract class WorkoutRepository {
     required String setId,
   });
   Future<WorkoutSession> completeSession(String sessionId);
+  Future<WorkoutSession> updateSessionNotes({
+    required String sessionId,
+    required String? notes,
+  });
   Future<List<WorkoutSession>> getHistory(String userId, {int limit = 50});
   Future<WorkoutSession?> findLastSimilarSession({
     required String userId,

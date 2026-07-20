@@ -230,6 +230,17 @@ class DriftWorkoutRepository implements WorkoutRepository {
     return _hydrateSession(sessionId);
   }
 
+  @override
+  Future<WorkoutSession> updateSessionNotes({
+    required String sessionId,
+    required String? notes,
+  }) async {
+    await (_db.update(_db.workoutSessions)..where((s) => s.id.equals(sessionId))).write(
+      WorkoutSessionsCompanion(notes: Value(notes)),
+    );
+    return _hydrateSession(sessionId);
+  }
+
   Future<WorkoutSession> _hydrateSession(String sessionId) async {
     final row = await (_db.select(_db.workoutSessions)
           ..where((s) => s.id.equals(sessionId)))
@@ -282,6 +293,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
         orElse: () => SessionStatus.inProgress,
       ),
       exercises: exercises,
+      notes: row.notes,
     );
   }
 
