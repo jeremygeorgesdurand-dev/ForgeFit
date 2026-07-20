@@ -265,7 +265,8 @@ class SettingsScreen extends ConsumerWidget {
               title: Text('Mentions légales'),
               subtitle: Text(
                 'Base d\'exercices : © hasaneyldrm/exercises-dataset (MIT).\n'
-                'Médias (images/GIFs) : © Gym visual — https://gymvisual.com/',
+                'Médias (images/GIFs) : © Gym visual — https://gymvisual.com/\n'
+                'Silhouette musculaire : vulovix/body-muscles (Apache 2.0)',
               ),
             ),
             const Divider(),

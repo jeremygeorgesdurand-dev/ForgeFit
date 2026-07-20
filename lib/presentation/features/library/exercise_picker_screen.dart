@@ -4,26 +4,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/providers/exercise_providers.dart';
 import '../../../core/localization/fr_labels.dart';
 import '../../../domain/entities/exercise.dart';
+import '../../../domain/repositories/exercise_repository.dart';
+import 'exercise_filter_sheet.dart';
 
-/// Full-screen exercise picker used by the workout template editor.
-/// Returns the selected [Exercise] via `Navigator.pop` / `context.pop`.
-class ExercisePickerScreen extends ConsumerStatefulWidget {
+/// Full-screen exercise picker used by the workout template editor. Shares
+/// the same filter state as the library so a muscle-group/equipment filter
+/// set there carries over here too. Returns the selected [Exercise] via
+/// `Navigator.pop` / `context.pop`.
+class ExercisePickerScreen extends ConsumerWidget {
   const ExercisePickerScreen({super.key});
 
   @override
-  ConsumerState<ExercisePickerScreen> createState() => _ExercisePickerScreenState();
-}
-
-class _ExercisePickerScreenState extends ConsumerState<ExercisePickerScreen> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final exercisesAsync = ref.watch(allExercisesProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final exercisesAsync = ref.watch(filteredExercisesProvider);
+    final filter = ref.watch(exerciseFilterProvider);
+    final hasActiveFilter = filter.muscleGroup != null || filter.equipment != null;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Choisir un exercice'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              hasActiveFilter ? Icons.filter_alt : Icons.filter_list,
+              color: hasActiveFilter ? Theme.of(context).colorScheme.primary : null,
+            ),
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (context) => const ExerciseFilterSheet(),
+            ),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Padding(
@@ -35,24 +47,28 @@ class _ExercisePickerScreenState extends ConsumerState<ExercisePickerScreen> {
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              onChanged: (v) => setState(() => _query = v.toLowerCase()),
+              onChanged: (query) {
+                ref.read(exerciseFilterProvider.notifier).state = ExerciseFilter(
+                  muscleGroup: filter.muscleGroup,
+                  equipment: filter.equipment,
+                  category: filter.category,
+                  searchQuery: query,
+                );
+              },
             ),
           ),
         ),
       ),
       body: exercisesAsync.when(
-        data: (exercises) {
-          final filtered = _query.isEmpty
-              ? exercises
-              : exercises.where((e) => e.name.toLowerCase().contains(_query)).toList();
-          return ListView.builder(
-            itemCount: filtered.length,
-            itemBuilder: (context, index) {
-              final e = filtered[index];
-              return _PickerTile(exercise: e, onTap: () => Navigator.of(context).pop(e));
-            },
-          );
-        },
+        data: (exercises) => exercises.isEmpty
+            ? const Center(child: Text('Aucun exercice ne correspond à ces critères.'))
+            : ListView.builder(
+                itemCount: exercises.length,
+                itemBuilder: (context, index) {
+                  final e = exercises[index];
+                  return _PickerTile(exercise: e, onTap: () => Navigator.of(context).pop(e));
+                },
+              ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Erreur: $err')),
       ),

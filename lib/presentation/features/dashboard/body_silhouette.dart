@@ -1,47 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:path_drawing/path_drawing.dart';
 
 import '../../../core/localization/fr_labels.dart';
 import '../../../core/theme/rank_colors.dart';
 import '../../../domain/entities/muscle_group.dart';
 import '../../../domain/entities/progress.dart';
 import '../../../domain/services/muscle_rank.dart';
+import 'muscle_svg_data.dart';
 
-typedef _Region = ({MuscleGroup group, Rect rect});
+// Shared 0..35 (x) / 0..93 (y) coordinate space for both views — back-view
+// paths come in at x+37 (their own viewBox is "37 0 35 93"), so they're
+// shifted back by -37 once here instead of juggling two viewBoxes at
+// paint/hit-test time.
+const _viewWidth = 35.0;
+const _viewHeight = 93.0;
 
-// Fractional coordinates (0..1) over the painted area, front view.
-const _frontRegions = <_Region>[
-  (group: MuscleGroup.shoulders, rect: Rect.fromLTRB(0.08, 0.14, 0.30, 0.24)),
-  (group: MuscleGroup.shoulders, rect: Rect.fromLTRB(0.70, 0.14, 0.92, 0.24)),
-  (group: MuscleGroup.chest, rect: Rect.fromLTRB(0.30, 0.16, 0.70, 0.30)),
-  (group: MuscleGroup.biceps, rect: Rect.fromLTRB(0.06, 0.24, 0.24, 0.40)),
-  (group: MuscleGroup.biceps, rect: Rect.fromLTRB(0.76, 0.24, 0.94, 0.40)),
-  (group: MuscleGroup.core, rect: Rect.fromLTRB(0.32, 0.30, 0.68, 0.46)),
-  (group: MuscleGroup.forearms, rect: Rect.fromLTRB(0.04, 0.40, 0.22, 0.55)),
-  (group: MuscleGroup.forearms, rect: Rect.fromLTRB(0.78, 0.40, 0.96, 0.55)),
-  (group: MuscleGroup.quads, rect: Rect.fromLTRB(0.30, 0.48, 0.48, 0.74)),
-  (group: MuscleGroup.quads, rect: Rect.fromLTRB(0.52, 0.48, 0.70, 0.74)),
-  (group: MuscleGroup.calves, rect: Rect.fromLTRB(0.30, 0.76, 0.47, 0.96)),
-  (group: MuscleGroup.calves, rect: Rect.fromLTRB(0.53, 0.76, 0.70, 0.96)),
-];
+class _MuscleRegion {
+  final String svgId;
+  final MuscleGroup? group;
+  final Path path;
+  const _MuscleRegion({required this.svgId, required this.group, required this.path});
+}
 
-// Fractional coordinates, back view.
-const _backRegions = <_Region>[
-  (group: MuscleGroup.shoulders, rect: Rect.fromLTRB(0.08, 0.14, 0.30, 0.24)),
-  (group: MuscleGroup.shoulders, rect: Rect.fromLTRB(0.70, 0.14, 0.92, 0.24)),
-  (group: MuscleGroup.back, rect: Rect.fromLTRB(0.30, 0.16, 0.70, 0.36)),
-  (group: MuscleGroup.triceps, rect: Rect.fromLTRB(0.06, 0.24, 0.24, 0.40)),
-  (group: MuscleGroup.triceps, rect: Rect.fromLTRB(0.76, 0.24, 0.94, 0.40)),
-  (group: MuscleGroup.forearms, rect: Rect.fromLTRB(0.04, 0.40, 0.22, 0.55)),
-  (group: MuscleGroup.forearms, rect: Rect.fromLTRB(0.78, 0.40, 0.96, 0.55)),
-  (group: MuscleGroup.glutes, rect: Rect.fromLTRB(0.32, 0.46, 0.68, 0.58)),
-  (group: MuscleGroup.hamstrings, rect: Rect.fromLTRB(0.30, 0.58, 0.48, 0.76)),
-  (group: MuscleGroup.hamstrings, rect: Rect.fromLTRB(0.52, 0.58, 0.70, 0.76)),
-  (group: MuscleGroup.calves, rect: Rect.fromLTRB(0.30, 0.76, 0.47, 0.96)),
-  (group: MuscleGroup.calves, rect: Rect.fromLTRB(0.53, 0.76, 0.70, 0.96)),
-];
+List<_MuscleRegion> _buildRegions(Map<String, String> source, {required bool shiftBack}) {
+  return [
+    for (final entry in source.entries)
+      _MuscleRegion(
+        svgId: entry.key,
+        group: muscleGroupForSvgId(entry.key),
+        path: shiftBack
+            ? parseSvgPathData(entry.value).shift(const Offset(-37, 0))
+            : parseSvgPathData(entry.value),
+      ),
+  ];
+}
 
-/// Interactive front/back body diagram: each muscle group region is tinted
-/// by its [MuscleGroupScore], and tapping a region surfaces the exact score.
+// Parsed once per app run — parsing ~90 SVG paths on every repaint would be
+// wasteful, and the source data never changes at runtime.
+final _frontRegions = _buildRegions(frontMusclePaths, shiftBack: false);
+final _backRegions = _buildRegions(backMusclePaths, shiftBack: true);
+
+/// Interactive front/back anatomical body diagram: real muscle-shaped
+/// regions (adapted from the open-source body-muscles project, Apache
+/// License 2.0) tinted by [MuscleGroupScore], tap a region to see its
+/// exact score.
 class BodySilhouette extends StatefulWidget {
   final Map<MuscleGroup, MuscleGroupScore> scores;
   const BodySilhouette({super.key, required this.scores});
@@ -54,11 +56,14 @@ class _BodySilhouetteState extends State<BodySilhouette> {
   bool _showBack = false;
   MuscleGroup? _selected;
 
-  void _handleTapUp(TapUpDetails details, Size size, List<_Region> regions) {
-    final dx = details.localPosition.dx / size.width;
-    final dy = details.localPosition.dy / size.height;
+  void _handleTapUp(TapUpDetails details, Size size, List<_MuscleRegion> regions) {
+    final source = Offset(
+      details.localPosition.dx / size.width * _viewWidth,
+      details.localPosition.dy / size.height * _viewHeight,
+    );
     for (final region in regions.reversed) {
-      if (region.rect.contains(Offset(dx, dy))) {
+      if (region.group == null) continue;
+      if (region.path.contains(source)) {
         setState(() => _selected = region.group);
         return;
       }
@@ -124,7 +129,7 @@ class _BodySilhouetteState extends State<BodySilhouette> {
             ],
             const SizedBox(height: 12),
             AspectRatio(
-              aspectRatio: 0.62,
+              aspectRatio: _viewWidth / _viewHeight,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -153,7 +158,7 @@ class _BodySilhouetteState extends State<BodySilhouette> {
               )
             else
               Text(
-                'Touche une zone pour voir le détail',
+                'Touche un muscle pour voir le détail',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
           ],
@@ -222,7 +227,7 @@ class _SelectedLegend extends StatelessWidget {
 }
 
 class _SilhouettePainter extends CustomPainter {
-  final List<_Region> regions;
+  final List<_MuscleRegion> regions;
   final Map<MuscleGroup, MuscleGroupScore> scores;
   final MuscleGroup? selected;
   final ColorScheme scheme;
@@ -236,78 +241,44 @@ class _SilhouettePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
+    canvas.save();
+    canvas.scale(size.width / _viewWidth, size.height / _viewHeight);
 
-    // Neutral body outline (head, torso, limbs) as reference context.
-    final outlinePaint = Paint()
-      ..color = scheme.outlineVariant
+    final strokePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    final bodyFill = Paint()..color = scheme.surfaceContainerHighest;
+      ..strokeWidth = 0.12
+      ..color = scheme.outlineVariant;
 
-    // Head.
-    final headCenter = Offset(w * 0.5, h * 0.08);
-    canvas.drawOval(Rect.fromCenter(center: headCenter, width: w * 0.16, height: h * 0.11), bodyFill);
-    canvas.drawOval(Rect.fromCenter(center: headCenter, width: w * 0.16, height: h * 0.11), outlinePaint);
-
-    // Torso silhouette (rounded).
-    final torso = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.22, h * 0.13, w * 0.78, h * 0.50),
-      Radius.circular(w * 0.08),
-    );
-    canvas.drawRRect(torso, bodyFill);
-
-    // Legs silhouette.
-    final legs = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.28, h * 0.46, w * 0.72, h * 0.98),
-      Radius.circular(w * 0.05),
-    );
-    canvas.drawRRect(legs, bodyFill);
-
-    // Arms silhouette.
-    final armL = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.02, h * 0.14, w * 0.24, h * 0.58),
-      Radius.circular(w * 0.05),
-    );
-    final armR = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.76, h * 0.14, w * 0.98, h * 0.58),
-      Radius.circular(w * 0.05),
-    );
-    canvas.drawRRect(armL, bodyFill);
-    canvas.drawRRect(armR, bodyFill);
-    canvas.drawRRect(torso, outlinePaint);
-    canvas.drawRRect(legs, outlinePaint);
-    canvas.drawRRect(armL, outlinePaint);
-    canvas.drawRRect(armR, outlinePaint);
-
-    // Colored, tappable muscle regions on top.
     for (final region in regions) {
-      final rect = Rect.fromLTRB(
-        region.rect.left * w,
-        region.rect.top * h,
-        region.rect.right * w,
-        region.rect.bottom * h,
-      );
-      final score = scores[region.group];
-      final confidence = score?.confidence ?? 0;
-      final baseColor = score == null
-          ? scheme.surfaceContainerHighest
-          : rankColor(rankForScore(score.score));
-      final alpha = score == null ? 0.5 : (0.45 + 0.55 * confidence);
+      final score = region.group == null ? null : scores[region.group];
+      final Color fillColor;
+      if (region.group == null) {
+        // Non-trainable anatomy (head, hands, feet, joints...) — always
+        // neutral, never tinted by a score.
+        fillColor = scheme.surfaceContainerHighest.withValues(alpha: 0.6);
+      } else if (score == null) {
+        fillColor = scheme.surfaceContainerHighest;
+      } else {
+        final rank = rankForScore(score.score);
+        final alpha = 0.45 + 0.55 * score.confidence;
+        fillColor = rankColor(rank).withValues(alpha: alpha);
+      }
 
-      final regionPaint = Paint()..color = baseColor.withValues(alpha: alpha);
-      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide * 0.3));
-      canvas.drawRRect(rrect, regionPaint);
+      canvas.drawPath(region.path, Paint()..color = fillColor);
+      canvas.drawPath(region.path, strokePaint);
 
-      if (region.group == selected) {
-        final selectedPaint = Paint()
-          ..color = scheme.secondary
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5;
-        canvas.drawRRect(rrect, selectedPaint);
+      if (region.group != null && region.group == selected) {
+        canvas.drawPath(
+          region.path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.35
+            ..color = scheme.secondary,
+        );
       }
     }
+
+    canvas.restore();
   }
 
   @override
