@@ -8,6 +8,7 @@ import '../../../domain/entities/progress.dart';
 import '../../../domain/services/muscle_rank.dart';
 import 'achievements_summary_card.dart';
 import 'body_silhouette.dart';
+import 'next_scheduled_session_card.dart';
 import 'training_calendar.dart';
 import 'training_streak_card.dart';
 import 'training_volume_chart.dart';
@@ -27,6 +28,8 @@ class DashboardScreen extends ConsumerWidget {
         data: (scores) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const NextScheduledSessionCard(),
+            const SizedBox(height: 16),
             const TrainingStreakCard(),
             const SizedBox(height: 16),
             const AchievementsSummaryCard(),
